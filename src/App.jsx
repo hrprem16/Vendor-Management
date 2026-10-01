@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { 
   Building2, UserCheck, ShieldCheck, DollarSign, Cpu, Key, Database, FileSpreadsheet, 
   PlusCircle, RefreshCw, LogOut, FileText, CheckCircle2, XCircle, ArrowLeftRight, 
-  Upload, Search, Filter, AlertCircle, Eye, ChevronRight, Layers, Award, Sparkles, Download
+  Upload, Search, Filter, AlertCircle, Eye, ChevronRight, Layers, Award, Sparkles, Download, CheckSquare
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { initialRequests, auditLogsSample } from './mockData';
@@ -10,9 +10,10 @@ import { initialRequests, auditLogsSample } from './mockData';
 export default function App() {
   const [requests, setRequests] = useState(initialRequests);
   const [auditLogs, setAuditLogs] = useState(auditLogsSample);
-  const [currentRole, setCurrentRole] = useState('VENDOR'); // VENDOR, PM, VP, FC, HARDWARE, AD_TEAM, ADMIN
+  const [currentRole, setCurrentRole] = useState('PM'); // VENDOR, PM, VP, FC, HARDWARE, AD_TEAM, ADMIN
   const [activeTab, setActiveTab] = useState('PIPELINE'); // DASHBOARD, NEW_REQUEST, PIPELINE, RATE_AMENDMENT, OFFBOARDING, REPORTS
-  
+  const [filterByRoleOnly, setFilterByRoleOnly] = useState(true);
+
   // Search & Filters
   const [searchTerm, setSearchTerm] = useState('');
   const [stageFilter, setStageFilter] = useState('ALL');
@@ -90,18 +91,49 @@ export default function App() {
 
   const { monthly: computedMonthlyCost, annual: computedAnnualCost } = calculateCosts();
 
-  // Role Actionable Task Count Helper
-  const getActionableCountForRole = () => {
+  // Role Descriptions & Actionable Step Mapping
+  const roleConfig = {
+    VENDOR: { title: "Vendor Partner Desk", icon: "🏢", step: 1, desc: "Create candidate requests, confirm onboarding docs & submit rate addendums." },
+    PM: { title: "Portfolio Manager Desk", icon: "👨‍💼", step: 2, desc: "Review candidate profiles, specify New vs Replacement, and compute rate card savings." },
+    VP: { title: "VP DFP Approval Desk", icon: "🛡️", step: 3, desc: "Evaluate financial compliance, DFP adherence, and approve or pushback high spend profiles." },
+    FC: { title: "Financial Controller Desk", icon: "💰", step: 4, desc: "Assign Cost Centres, grant financial clearance, and sign off on offboarding exits." },
+    HARDWARE: { title: "Asset / Hardware Allocation Desk", icon: "💻", step: 5, desc: "Track auto-triggered hardware allocation requests for joining consultants." },
+    AD_TEAM: { title: "Active Directory & Access Team", icon: "🆔", step: 8, desc: "Create Active Directory accounts, assign official ILOM IDs & trigger Kairos auto-sync." },
+    ADMIN: { title: "System Administrator & Kairos ERP", icon: "⚙️", step: 9, desc: "Full administrative oversight, Kairos integration monitoring & system audit trails." }
+  };
+
+  // Helper to filter list based on role
+  const matchesRoleFilter = (req) => {
+    if (!filterByRoleOnly || currentRole === 'ADMIN') return true;
     switch (currentRole) {
-      case 'PM': return requests.filter(r => r.currentStep === 2).length;
-      case 'VP': return requests.filter(r => r.currentStep === 3).length;
-      case 'FC': return requests.filter(r => r.currentStep === 4 || r.currentStep === 11).length;
-      case 'AD_TEAM': return requests.filter(r => r.currentStep === 8).length;
-      case 'HARDWARE': return requests.filter(r => r.currentStep === 5).length;
-      case 'VENDOR': return requests.filter(r => r.currentStep === 1 || r.currentStep === 6).length;
-      default: return requests.length;
+      case 'VENDOR': return req.currentStep === 1 || req.currentStep === 6;
+      case 'PM': return req.currentStep === 2;
+      case 'VP': return req.currentStep === 3;
+      case 'FC': return req.currentStep === 4 || req.currentStep === 11;
+      case 'HARDWARE': return req.currentStep === 5;
+      case 'AD_TEAM': return req.currentStep === 8;
+      default: return true;
     }
   };
+
+  const filteredRequests = requests.filter(r => {
+    const matchesSearch = r.consultantName.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          r.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          r.partnerName.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const matchesRole = matchesRoleFilter(r);
+
+    if (stageFilter === 'ALL') return matchesSearch && matchesRole;
+    if (stageFilter === 'PM') return matchesSearch && matchesRole && r.currentStep === 2;
+    if (stageFilter === 'VP') return matchesSearch && matchesRole && r.currentStep === 3;
+    if (stageFilter === 'FC') return matchesSearch && matchesRole && r.currentStep === 4;
+    if (stageFilter === 'ACTIVE') return matchesSearch && matchesRole && r.status === 'ACTIVE';
+    if (stageFilter === 'OFFBOARDING') return matchesSearch && matchesRole && r.currentStep === 11;
+    return matchesSearch && matchesRole;
+  });
+
+  // Actionable Task Count
+  const pendingCount = requests.filter(r => matchesRoleFilter(r)).length;
 
   // Create Request (Step 1)
   const handleCreateRequest = (e) => {
@@ -138,7 +170,7 @@ export default function App() {
     alert(`Request ${newId} submitted successfully! Moved to PM Review queue.`);
   };
 
-  // Bulk Upload CSV Download Sample
+  // CSV Download Sample
   const handleDownloadSampleCsv = () => {
     const csvContent = "data:text/csv;charset=utf-8,Consultant Name,Contact,Location,Skill/Role,Joining Date,Billing Model,Base Cost,Markup %\nAarav Sharma,+919876543210,Mumbai,Senior .NET Architect,2026-10-15,HOURLY_TIMESHEET,120000,15\nPriya Sundaram,+919822011223,Bengaluru,Angular Specialist,2026-10-20,FIXED_OPEX,145000,0";
     const encodedUri = encodeURI(csvContent);
@@ -444,21 +476,6 @@ export default function App() {
     alert('Financial Controller closed offboarding. Consultant marked INACTIVE.');
   };
 
-  // Filter requests based on search and stage filter
-  const filteredRequests = requests.filter(r => {
-    const matchesSearch = r.consultantName.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          r.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          r.partnerName.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    if (stageFilter === 'ALL') return matchesSearch;
-    if (stageFilter === 'PM') return matchesSearch && r.currentStep === 2;
-    if (stageFilter === 'VP') return matchesSearch && r.currentStep === 3;
-    if (stageFilter === 'FC') return matchesSearch && r.currentStep === 4;
-    if (stageFilter === 'ACTIVE') return matchesSearch && r.status === 'ACTIVE';
-    if (stageFilter === 'OFFBOARDING') return matchesSearch && r.currentStep === 11;
-    return matchesSearch;
-  });
-
   // Step Badge Helper
   const getStepBadge = (step, status) => {
     if (status === 'REJECTED') return <span className="badge badge-rose">Rejected</span>;
@@ -495,16 +512,16 @@ export default function App() {
           </div>
         </div>
 
-        {/* ROLE ACTION BADGE */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+        {/* ACTIVE ROLE SWITCHER & BADGE */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
+          
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(243, 112, 33, 0.15)', padding: '0.4rem 0.85rem', borderRadius: '20px', border: '1px solid rgba(243, 112, 33, 0.3)' }}>
             <Sparkles size={16} style={{ color: 'var(--brand-orange)' }} />
             <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--brand-orange)' }}>
-              {getActionableCountForRole()} Pending Actions for {currentRole}
+              {pendingCount} Pending Action(s) for {currentRole}
             </span>
           </div>
 
-          {/* ROLE SWITCHER */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', background: 'var(--bg-surface)', padding: '0.4rem 1rem', borderRadius: '30px', border: '1px solid var(--border-color)' }}>
             <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600 }}>SWITCH ROLE:</span>
             <select 
@@ -523,6 +540,25 @@ export default function App() {
           </div>
         </div>
       </header>
+
+      {/* DYNAMIC ROLE BANNER */}
+      <div style={{ background: 'linear-gradient(90deg, #1C2541, #0B132B)', padding: '0.75rem 2rem', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <span style={{ fontSize: '1.4rem' }}>{roleConfig[currentRole]?.icon}</span>
+          <div>
+            <h3 style={{ fontSize: '0.95rem', color: 'var(--text-main)', margin: 0 }}>{roleConfig[currentRole]?.title} Active View</h3>
+            <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: 0 }}>{roleConfig[currentRole]?.desc}</p>
+          </div>
+        </div>
+
+        <button 
+          className={`btn ${filterByRoleOnly ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => setFilterByRoleOnly(!filterByRoleOnly)}
+          style={{ fontSize: '0.78rem', padding: '0.4rem 0.85rem' }}
+        >
+          {filterByRoleOnly ? '🎯 Role View Only (Filtered)' : '🌐 System Wide View (All Tasks)'}
+        </button>
+      </div>
 
       {/* MAIN CONTAINER */}
       <div style={{ display: 'flex', flex: 1 }}>
@@ -551,7 +587,7 @@ export default function App() {
             onClick={() => setActiveTab('PIPELINE')}
             style={{ justifyContent: 'flex-start' }}
           >
-            <ArrowLeftRight size={18} /> Requests Pipeline ({requests.length})
+            <ArrowLeftRight size={18} /> Requests Pipeline ({filteredRequests.length})
           </button>
 
           <button 
@@ -579,8 +615,8 @@ export default function App() {
           </button>
 
           <div style={{ marginTop: 'auto', background: 'rgba(243, 112, 33, 0.08)', padding: '1rem', borderRadius: '10px', border: '1px dashed rgba(243, 112, 33, 0.3)' }}>
-            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Pro-Tip:</p>
-            <p style={{ fontSize: '0.75rem', color: 'var(--text-main)', marginTop: '0.2rem' }}>All 11 steps are fully interactive! Switch roles in top header to test PM, VP, FC & AD Team steps.</p>
+            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Role Adaptability:</p>
+            <p style={{ fontSize: '0.75rem', color: 'var(--text-main)', marginTop: '0.2rem' }}>Switching roles above immediately updates your pipeline, actionable task counts, and drawer approval forms!</p>
           </div>
         </aside>
 
@@ -600,17 +636,15 @@ export default function App() {
               {/* STATS CARDS */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem', marginBottom: '2rem' }}>
                 <div className="card" style={{ borderLeft: '4px solid var(--brand-orange)' }}>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>TOTAL REQUESTS</span>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>TOTAL SYSTEM REQUESTS</span>
                   <h3 style={{ fontSize: '2rem', color: 'var(--text-main)', margin: '0.3rem 0' }}>{requests.length}</h3>
                   <span style={{ fontSize: '0.75rem', color: 'var(--accent-green)' }}>Active in workflow</span>
                 </div>
 
                 <div className="card" style={{ borderLeft: '4px solid var(--accent-amber)' }}>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>PENDING PM/VP/FC APPROVALS</span>
-                  <h3 style={{ fontSize: '2rem', color: 'var(--text-main)', margin: '0.3rem 0' }}>
-                    {requests.filter(r => [2, 3, 4].includes(r.currentStep)).length}
-                  </h3>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--accent-amber)' }}>Awaiting DFP decision</span>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>YOUR ROLE ACTIONABLE TASKS</span>
+                  <h3 style={{ fontSize: '2rem', color: 'var(--brand-orange)', margin: '0.3rem 0' }}>{pendingCount}</h3>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--accent-amber)' }}>Requires {currentRole} action</span>
                 </div>
 
                 <div className="card" style={{ borderLeft: '4px solid var(--accent-green)' }}>
@@ -632,7 +666,7 @@ export default function App() {
 
               {/* RECENT PIPELINE SUMMARY */}
               <div className="card">
-                <h3 style={{ fontSize: '1.1rem', marginBottom: '1rem', color: 'var(--text-main)' }}>Recent Vendor Requests</h3>
+                <h3 style={{ fontSize: '1.1rem', marginBottom: '1rem', color: 'var(--text-main)' }}>Recent Vendor Requests ({currentRole} View)</h3>
                 <div className="data-table-container">
                   <table className="data-table">
                     <thead>
@@ -647,7 +681,7 @@ export default function App() {
                       </tr>
                     </thead>
                     <tbody>
-                      {requests.slice(0, 5).map(req => (
+                      {filteredRequests.slice(0, 5).map(req => (
                         <tr key={req.id}>
                           <td style={{ fontWeight: 600, color: 'var(--brand-orange)' }}>{req.id}</td>
                           <td>{req.consultantName}</td>
@@ -811,8 +845,8 @@ export default function App() {
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
                 <div>
-                  <h2 style={{ fontSize: '1.5rem', color: 'var(--text-main)' }}>Requests Pipeline & Workflow</h2>
-                  <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>View and act on candidate applications through the 11 approval stages.</p>
+                  <h2 style={{ fontSize: '1.5rem', color: 'var(--text-main)' }}>Requests Pipeline ({currentRole} View)</h2>
+                  <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Showing {filteredRequests.length} candidate applications for {currentRole}.</p>
                 </div>
 
                 {/* SEARCH & STAGE FILTER BAR */}
@@ -830,7 +864,7 @@ export default function App() {
                   </div>
 
                   <select className="form-select" value={stageFilter} onChange={(e) => setStageFilter(e.target.value)}>
-                    <option value="ALL">All Workflow Stages</option>
+                    <option value="ALL">All Stages</option>
                     <option value="PM">Step 2: PM Review</option>
                     <option value="VP">Step 3: VP Approval</option>
                     <option value="FC">Step 4: FC Review</option>
